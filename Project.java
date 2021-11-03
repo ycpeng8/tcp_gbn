@@ -20,6 +20,21 @@ public class Project
                                    new InputStreamReader(System.in));
                                    
         System.out.println("-- * Network Simulator v1.0 * --");
+
+        int response;
+        System.out.println("use predefined param? (enter 1)");
+        Scanner sn = new Scanner(System.in);
+        response = sn.nextInt();
+        if(response == 1){
+            nsim = 10;
+            loss = 0.1;
+            corrupt = 0.1;
+            delay = 200;
+            trace = 3;
+            seed = 1234;
+            windowsize = 3;
+            timeout = 15;
+        }
         
         while (nsim < 1)
         {
