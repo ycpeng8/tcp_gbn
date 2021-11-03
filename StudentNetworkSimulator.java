@@ -228,9 +228,13 @@ public class StudentNetworkSimulator extends NetworkSimulator
     protected void aInput(Packet packet)
     {
         if(Checksumming(packet) == packet.getChecksum()){
-                        int[] sack = packet.getSack();
+            int[] tmpsack = packet.getSack();
             int send_base_Seq = send_base % LimitSeqNo;
-            List<Integer> tmpal = Arrays.stream(sack).boxed().collect(Collectors.toList());
+            System.out.println("show sack ");
+            for(int i : tmpsack){
+                System.out.print(i+", ");
+            }
+            List<Integer> tmpal = Arrays.stream(packet.getSack()).boxed().collect(Collectors.toList());
             int ack = packet.getAcknum();
             System.out.println("get sack "+tmpal);
             System.out.println("get ack "+ack);
