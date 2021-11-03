@@ -330,7 +330,7 @@ public class StudentNetworkSimulator extends NetworkSimulator
         send_base = 0;
         next_seq = 0;
         LPS = 0;
-        LimitSeqNo = 2 * WindowSize;
+        LimitSeqNo = WindowSize + 1;
         SWS = new Packet[WindowSize];
         ackstatus = new int[WindowSize];
 
