@@ -116,6 +116,8 @@ public class StudentNetworkSimulator extends NetworkSimulator
     private int send_base;
     private int next_seq;
     private int LPS; // Last packet sent
+    private Packet[] SWS;   //Sender Window
+    private int[] ackstatus;
 
     /*
      * B variables and functions
@@ -161,6 +163,25 @@ public class StudentNetworkSimulator extends NetworkSimulator
         return packet.getChecksum() != Checksumming(packet);
     }
 
+    //print SWS
+    private String printSWS(Packet[] sws){
+        StringBuilder s = new StringBuilder();
+        s.append("[ ");
+        String[] ret = new String[sws.length];
+        for(int i=0; i<sws.length;i++){
+            if(sws[i]== null){
+                ret[i] = "null";
+                s.append(ret[i]+", ");
+            }
+            else{
+                ret[i] = "pkt "+sws[i].getSeqnum();
+                s.append(ret[i]+", ");
+            }
+        }
+        s.append("]");
+        return s.toString();
+    }
+
     // This is the constructor. Don't touch!
     public StudentNetworkSimulator(int numMessages, double loss, double corrupt, double avgDelay, int trace, int seed,
             int winsize, double delay) {
@@ -175,7 +196,6 @@ public class StudentNetworkSimulator extends NetworkSimulator
     // the data in such a message is delivered in-order, and correctly, to
     // the receiving upper layer.
     protected void aOutput(Message message) {
-        // System.out.println("+++++++++++++++++");
         next_seq = LPS % LimitSeqNo;
         Packet sender_packet = new Packet(next_seq, 0, -1, message.getData());
         sender_packet.setChecksum(Checksumming(sender_packet));
@@ -185,17 +205,18 @@ public class StudentNetworkSimulator extends NetworkSimulator
         // System.out.println("get payload " + sender_buffer.get(LPS).getPayload());
         // System.out.println("Send_base is" + send_base);
         // System.out.println("window siez is " + WindowSize);
-        for (; LPS < sender_buffer.size() && LPS < send_base + WindowSize; LPS++) {
+        for (LPS = send_base; LPS < sender_buffer.size() && LPS < send_base + WindowSize; LPS++) {
             if (sender_buffer.get(LPS) != null) {
-                // if(SWS[LPS % WindowSize] == null){
-                // SWS[LPS % WindowSize] = sender_buffer.get(LPS);
-                // }
-                toLayer3(A, sender_buffer.get(LPS));
-                // LPS++;
-                stopTimer(A);
-                startTimer(A, RxmtInterval);
+                int pkt_seq = sender_buffer.get(LPS).getSeqnum();
+                if(SWS[pkt_seq % WindowSize] == null){
+                    SWS[pkt_seq % WindowSize] = sender_buffer.get(LPS);
+                    toLayer3(A, sender_buffer.get(LPS));
+                    stopTimer(A);
+                    startTimer(A, RxmtInterval);
+                }
             }
         }
+        System.out.println("In Aoutput print SWS "+printSWS(SWS));
 
     }
 
@@ -206,43 +227,76 @@ public class StudentNetworkSimulator extends NetworkSimulator
     protected void aInput(Packet packet)
     {
         if(Checksumming(packet) == packet.getChecksum()){
+                        int[] sack = packet.getSack();
             int send_base_Seq = send_base % LimitSeqNo;
-            int tmpAck = packet.getSeqnum();
-            System.out.println("get ack num "+tmpAck);
-            if(send_base_Seq >= WindowSize && tmpAck < WindowSize){
-                stopTimer(A);
-                send_base += LimitSeqNo - send_base_Seq + tmpAck;
+            List<Integer> tmpal = Arrays.stream(sack).boxed().collect(Collectors.toList());
+            int ack = packet.getAcknum();
+            System.out.println("get sack "+tmpal);
+            System.out.println("get ack "+ack);
+            System.out.println("send_base_Seq "+send_base_Seq);
+            System.out.println("send_base before update "+send_base);
+            System.out.println("In Ainput before update send_base, print SWS "+printSWS(SWS));
+
+
+            if(send_base_Seq >= WindowSize && ack < WindowSize){
+            //pkt at send_base got by B
+                for(int i=0;i< SWS.length;i++){
+//                    System.out.println("send_base_Seq "+send_base_Seq);
+                    if(SWS[i] != null && SWS[i].getSeqnum() == send_base_Seq){
+                        SWS[i] = null;
+                        stopTimer(A);
+                        System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+                        // ackstatus[i] = 1;
+                    }
+                }
+                send_base += LimitSeqNo - send_base_Seq + ack;
+                System.out.println("send_base after update "+send_base);
+                for(int i=0;i<ackstatus.length;i++){
+                    if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
+                        SWS[i] = null;
+                        stopTimer(A);
+                        System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+
+                        // ackstatus[i] = 1;
+                    }
+                }
             }
-            else if(tmpAck >= send_base_Seq+1){
-                stopTimer(A);
-                send_base += (tmpAck - send_base_Seq) ;
-                if(send_base < sender_buffer.size()){
-                    toLayer3(A,sender_buffer.get(send_base));
-                    stopTimer(A);
-                    startTimer(A, RxmtInterval);
+            else if(ack >= send_base_Seq+1){
+                for(int i=0;i< SWS.length;i++){
+//                    System.out.println("send_base_Seq "+send_base_Seq);
+//                    System.out.println("get pkt seq_num "+ );
+                    if(SWS[i] != null && SWS[i].getSeqnum() == send_base_Seq){
+                        SWS[i] = null;
+                        stopTimer(A);
+                        System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+
+                        // ackstatus[i] = 1;
+                    }
+                }
+                send_base += (ack - send_base_Seq) ;
+                System.out.println("send_base after update "+send_base);
+                for(int i=0;i<ackstatus.length;i++){
+                    if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
+                        SWS[i] = null;
+                        stopTimer(A);
+                        System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+
+                        // ackstatus[i] = 1;
+                    }
                 }
             }
             else{
-                if(send_base < sender_buffer.size()){
-                    toLayer3(A,sender_buffer.get(send_base));
-                    stopTimer(A);
-                    startTimer(A, RxmtInterval);
+//                stopTimer(A);
+                for(int i=0;i<ackstatus.length;i++){
+                    if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
+                        SWS[i] = null;
+                        stopTimer(A);
+                        System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+                        // ackstatus[i] = 1;
+                    }
                 }
             }
-            // if(packet.getAcknum() >= send_base+1){
-            //     stopTimer(A);
-                
-                
-            //     send_base = packet.getAcknum();
-            //     // LPS=send_base+WindowSize-1;
-            // }
         }
-        // else{
-        //     toLayer3(A,sender_buffer.get(send_base));
-        //     stopTimer(A);
-        //     startTimer(A, RxmtInterval);
-        // }
-
     }
 
     // This routine will be called when A's timer expires (thus generating a
@@ -250,11 +304,15 @@ public class StudentNetworkSimulator extends NetworkSimulator
     // the retransmission of packets. See startTimer() and stopTimer(), above,
     // for how the timer is started and stopped.
     protected void aTimerInterrupt() {
-        toLayer3(A, sender_buffer.get(send_base));
-        stopTimer(A);
-        startTimer(A, RxmtInterval);
-            
-
+        System.out.println("Timer interrupt, resend SWS");
+        System.out.println("In Timer Interrupt, print SWS "+printSWS(SWS));
+        for(int i=0;i<SWS.length;i++){
+            if(SWS[i]!= null){
+                toLayer3(A, SWS[i]);
+                stopTimer(A);
+                startTimer(A, RxmtInterval);
+            }
+        }
     }
 
     // This routine will be called once, before any of your other A-side
@@ -268,6 +326,8 @@ public class StudentNetworkSimulator extends NetworkSimulator
         next_seq = 0;
         LPS = 0;
         LimitSeqNo = 2 * WindowSize;
+        SWS = new Packet[WindowSize];
+        ackstatus = new int[WindowSize];
 
     }
 
