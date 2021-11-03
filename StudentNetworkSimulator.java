@@ -121,18 +121,27 @@ public class StudentNetworkSimulator extends NetworkSimulator
      * B variables and functions
      */
     private int RWS; // receive window size
-    private int LPA; // last packet acceptable
     private int NPE; // next packet expected
     private int b_acknum; // b's acknum
     private int b_checksum; // b's checksum
     private int[] sack = {-1, -1, -1, -1, -1}; // b's sack
-    private LinkedList<Packet> receiver_window = new LinkedList<Packet>(); // window of receiving packets from layer 3
+    private LinkedList<Packet> sack_buffer = new LinkedList<Packet>(); // b's sack buffer
 
     private void b_send_pkt(int seqnum, int[] sack) {
         b_checksum = seqnum + b_acknum;
         Packet sndpkt = new Packet(seqnum, b_acknum, b_checksum, sack);
         toLayer3(B, sndpkt);
         Num_Ackpkt_sentBy_B++;
+        System.out.print("sack: [ ");
+        for (int i = 0; i < 5; i++)
+        {
+            if (sack[i] == -1)
+            {
+                break;
+            }
+            System.out.print(sack[i] + " ");
+        }
+        System.out.println("]");
 
         return;
     }
@@ -279,112 +288,135 @@ public class StudentNetworkSimulator extends NetworkSimulator
         System.out.println("bInput(): B getting pkt" + packet.getSeqnum() + ", expecting pkt" + NPE);
 
         int this_seqnum = packet.getSeqnum();
-        if (((NPE < LPA) && (this_seqnum >= NPE) && (this_seqnum <= LPA)) || ((NPE > LPA) && (this_seqnum >= NPE || this_seqnum <= LPA)))
+
+        // if packet is duplicate and ACKed before NPE
+        if (((this_seqnum < NPE) && ((NPE - this_seqnum) <= WindowSize)) 
+        || ((this_seqnum > NPE) && ((this_seqnum - NPE) >= WindowSize)))
         {
-            if (receiver_window.size() == 0)
-            {
-                if (this_seqnum == NPE)
-                {
-                    NPE = (NPE + 1) % LimitSeqNo;
-                    LPA = (LPA + 1) % LimitSeqNo;
-                    b_send_pkt(NPE, sack);
-                    toLayer5(packet.getPayload());
-                    Num_delivered_to_Layter5_atB++;
-                    return;
-                }
-                else
-                {
-                    receiver_window.add(packet);
-                    b_send_pkt(NPE, sack);
-                    return;
-                }
-            }
-            else
-            {
-                int length = receiver_window.size();
-                for (int i = 0; i < length; i++)
-                {
-                    if (this_seqnum == receiver_window.get(i).getSeqnum())
-                    {
-                        // if packet is duplicate
-                        System.out.println("bInput(): getting a duplicate pkt" + this_seqnum);
-                        b_send_pkt(NPE, sack);
-                        return;
-                    }
-                    
-                    if (NPE < LPA)
-                    {
-                        if (this_seqnum < receiver_window.get(i).getSeqnum())
-                        {
-                            receiver_window.add(i, packet);
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        if (((this_seqnum >= NPE) && (receiver_window.get(i).getSeqnum() > NPE) && (this_seqnum < receiver_window.get(i).getSeqnum()))
-                        || ((this_seqnum >= NPE) && (receiver_window.get(i).getSeqnum() <= LPA))
-                        || ((this_seqnum <= LPA) && (receiver_window.get(i).getSeqnum() <= LPA) && (this_seqnum < receiver_window.get(i).getSeqnum())))
-                        {
-                            receiver_window.add(i, packet);
-                            break;
-                        }
-                    }
-                }
-
-                if (receiver_window.size() == length)
-                {
-                    receiver_window.addLast(packet);
-                }
-
-                // test
-                System.out.print("bInput(): receiver window: ");
-                for (int i = 0; i < receiver_window.size(); i++)
-                {
-                    System.out.print(receiver_window.get(i).getSeqnum() + " ");
-                }
-                System.out.println();
-
-                while (receiver_window.size() != 0)
-                {
-                    if (receiver_window.get(0).getSeqnum() != NPE)
-                    {
-                        b_send_pkt(NPE, sack);
-                        return;
-                    }
-
-                    NPE = (NPE + 1) % LimitSeqNo;
-                    LPA = (LPA + 1) % LimitSeqNo;
-                    toLayer5(receiver_window.get(0).getPayload());
-                    Num_delivered_to_Layter5_atB++;
-                    receiver_window.remove();
-                }
-                b_send_pkt(NPE, sack);
-                return;
-            }
-            
+            b_send_pkt(NPE, sack);
+            return;
         }
-        else if (NPE == LPA)
+
+        // if the size of sack is 0, the operation will be easy and I take it out as one part alone
+        if (sack_buffer.size() == 0)
         {
             if (this_seqnum == NPE)
             {
                 NPE = (NPE + 1) % LimitSeqNo;
-                LPA = (LPA + 1) % LimitSeqNo;
-                toLayer5(packet.getPayload());
-                Num_delivered_to_Layter5_atB++;
                 b_send_pkt(NPE, sack);
+                toLayer5(packet.getPayload());
+                Num_delivered_to_Layter5_atB ++;
+                return;
             }
             else
             {
+                sack_buffer.add(packet);
+                sack[0] = packet.getSeqnum();
                 b_send_pkt(NPE, sack);
+                return;
             }
         }
-        // if packet is out of receiver_window
-        else
+        // if the sack is full and this_seqnum doesn't equal to NPE, just drop it and send ACK
+        else if ((this_seqnum != NPE) && (sack_buffer.size() == 5))
         {
             b_send_pkt(NPE, sack);
+            return;
         }
-        return;
+        // if the sack is not full
+        else
+        {
+            // if receive the expected packet, send cum ACK with an appropriate SACK
+            if (this_seqnum == NPE)
+            {
+                NPE = (NPE + 1) % LimitSeqNo;
+                toLayer5(packet.getPayload());
+                Num_delivered_to_Layter5_atB ++;
+                while (sack_buffer.size() != 0)
+                {
+                    if (sack_buffer.get(0).getSeqnum() != NPE)
+                    {
+                        break;
+                    }
+                    
+                    toLayer5(packet.getPayload());
+                    Num_delivered_to_Layter5_atB ++;
+                    NPE = (NPE + 1) % LimitSeqNo; 
+                    sack_buffer.remove();
+                }
+
+                // set sack
+                if (sack_buffer.size() == 0)
+                {
+                    for (int i = 0; i < 5; i++)
+                    {
+                        sack[i] = -1;
+                    }
+                }
+                else
+                {
+                    int length1 = sack_buffer.size();
+                    for (int i = 0; i < 5; i++)
+                    {
+                        if (i < length1)
+                        {
+                            sack[i] = sack_buffer.get(i).getSeqnum();
+                        }
+                        sack[i] = -1;
+                    }
+                }
+
+                b_send_pkt(NPE, sack);
+                return;
+            }
+            // if receive the unexpected packet, send ACK NPE with a changed SACK
+            else
+            {
+                // set sack_buffer
+                int sack_buffer_length = sack_buffer.size();
+                for (int i = 0; i < sack_buffer_length; i++)
+                {
+                    // if packet is duplicate and ACKed after NPE
+                    if (this_seqnum == sack_buffer.get(i).getSeqnum())
+                    {
+                        b_send_pkt(NPE, sack);
+                        return;
+                    }
+
+                    if ((this_seqnum > NPE) 
+                    && (((sack_buffer.get(i).getSeqnum() > NPE) && (this_seqnum < sack_buffer.get(i).getSeqnum())) 
+                    || (sack_buffer.get(i).getSeqnum() < NPE)))
+                    {
+                        sack_buffer.add(i, packet);
+                        break;
+                    }
+                    else if ((this_seqnum < NPE) 
+                    && ((sack_buffer.get(i).getSeqnum() < NPE) 
+                    || (this_seqnum < sack_buffer.get(i).getSeqnum())))
+                    {
+                        sack_buffer.add(i, packet);
+                        break;
+                    }
+
+                }
+                if (sack_buffer.size() == sack_buffer_length)
+                {
+                    sack_buffer.addLast(packet);
+                }
+
+                // set sack
+                int length2 = sack_buffer.size();
+                for (int i = 0; i < 5; i++)
+                {
+                    if (i < length2)
+                    {
+                        sack[i] = sack_buffer.get(i).getSeqnum();
+                    }
+                    sack[i] = -1;
+                }
+                b_send_pkt(NPE, sack);
+                return;
+            }
+        }
     }
 
     // This routine will be called once, before any of your other B-side
@@ -392,9 +424,8 @@ public class StudentNetworkSimulator extends NetworkSimulator
     // initialization (e.g. of member variables you add to control the state
     // of entity B).
     protected void bInit() {
-        RWS = WindowSize;
+        RWS = 1;
         NPE = 0;
-        LPA = RWS + NPE - 1;
         b_acknum = 1;
     }
 

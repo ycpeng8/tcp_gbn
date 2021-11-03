@@ -114,7 +114,7 @@ public class Packet
     public String toString()
     {
         return("seqnum: " + seqnum + "  acknum: " + acknum + "  checksum: " +
-               checksum + "  payload: " + payload + " sack: " + sack);
+               checksum + "  payload: " + payload);
     }
     
 }
