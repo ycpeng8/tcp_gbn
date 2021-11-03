@@ -12,8 +12,29 @@ public class Packet
         acknum = p.getAcknum();
         checksum = p.getChecksum();
         payload = new String(p.getPayload());
+        this.sack = p.getSack();
     }
     
+    public Packet(int seq, int ack, int check, String newPayload, int[] sack)
+    {
+        seqnum = seq;
+        acknum = ack;
+        checksum = check;
+        if (newPayload == null)
+        {
+            payload = "";
+        }        
+        else if (newPayload.length() > NetworkSimulator.MAXDATASIZE)
+        {
+            payload = null;
+        }
+        else
+        {
+            payload = new String(newPayload);
+        }
+        this.sack = sack;
+    }
+
     public Packet(int seq, int ack, int check, String newPayload)
     {
         seqnum = seq;
