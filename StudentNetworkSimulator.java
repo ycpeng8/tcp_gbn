@@ -185,11 +185,14 @@ public class StudentNetworkSimulator extends NetworkSimulator
     }
 
     private int getOffset(int sbq, int ackseq){
-        if(sbq >= WindowSize && ackseq < WindowSize){
+        if(ackseq< sbq){
             return LimitSeqNo - sbq + ackseq;
         }
-        else{
+        else if(sbq <ackseq ){
             return ackseq - sbq;
+        }
+        else{
+            return 0;
         }
 
     }
@@ -218,19 +221,23 @@ public class StudentNetworkSimulator extends NetworkSimulator
         // System.out.println("get payload " + sender_buffer.get(LPS).getPayload());
         // System.out.println("Send_base is" + send_base);
         // System.out.println("window siez is " + WindowSize);
-        System.out.println("In Aoutput before update sws print SWS "+printSWS(SWS));
+
         for (LPS = send_base; LPS < sender_buffer.size() && LPS < send_base + WindowSize; LPS++) {
-            if (sender_buffer.get(LPS) != null) {
-                int pkt_seq = sender_buffer.get(LPS).getSeqnum();
-                if(SWS[pkt_seq % WindowSize] == null && ack_buffer.get(LPS)!= 1){
-                    SWS[pkt_seq % WindowSize] = sender_buffer.get(LPS);
-                    toLayer3(A, sender_buffer.get(LPS));
-                    stopTimer(A);
-                    startTimer(A, RxmtInterval);
-                }
+            if (sender_buffer.get(LPS) != null && ack_buffer.get(LPS) == 0) {
+                toLayer3(A, sender_buffer.get(LPS));
+                ack_buffer.set(LPS,1);
+                stopTimer(A);
+                startTimer(A, RxmtInterval);
+                // int pkt_seq = sender_buffer.get(LPS).getSeqnum();
+                // if(SWS[pkt_seq % WindowSize] == null && ack_buffer.get(LPS)!= 1){
+                //     SWS[pkt_seq % WindowSize] = sender_buffer.get(LPS);
+                //     toLayer3(A, sender_buffer.get(LPS));
+                //     stopTimer(A);
+                //     startTimer(A, RxmtInterval);
+                // }
             }
         }
-        System.out.println("In Aoutput after update sws print SWS "+printSWS(SWS));
+
 
     }
 
@@ -243,93 +250,146 @@ public class StudentNetworkSimulator extends NetworkSimulator
         if(Checksumming(packet) == packet.getChecksum()){
             int[] tmpsack = packet.getSack();
             int send_base_Seq = send_base % LimitSeqNo;
-            System.out.println("show sack ");
-            for(int i : tmpsack){
-                System.out.print(i+", ");
-            }
+            // System.out.println("show sack ");
+            // for(int i : tmpsack){
+            //     System.out.print(i+", ");
+            // }
             List<Integer> tmpal = Arrays.stream(packet.getSack()).boxed().collect(Collectors.toList());
-            int ack = packet.getAcknum();
+            int ack = packet.getSeqnum();
             System.out.println("get sack "+tmpal);
             System.out.println("get ack "+ack);
             System.out.println("send_base_Seq "+send_base_Seq);
             System.out.println("send_base before update "+send_base);
-            System.out.println("In Ainput before update send_base, print SWS "+printSWS(SWS));
+            // System.out.println("In Ainput before update send_base, print SWS "+printSWS(SWS));
 
+            if(ack < send_base_Seq){
+                stopTimer(A);
 
-            if(send_base_Seq >= WindowSize && ack < WindowSize){
-            //pkt at send_base got by B
-                for(int i=0;i< SWS.length;i++){
-//                    System.out.println("send_base_Seq "+send_base_Seq);
-                    if(SWS[i] != null && SWS[i].getSeqnum() == send_base_Seq){
-                        SWS[i] = null;
-                        ack_buffer.set(send_base,1);
-                        stopTimer(A);
-                        System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
-                        // ackstatus[i] = 1;
+                for(int i=0;i < tmpsack.length;i++){
+                    if(tmpsack[i] == -1){
+                        continue;
                     }
+                    int offset = getOffset(send_base_Seq,tmpsack[i]);
+                    int idx = send_base+offset;
+                    ack_buffer.set(idx,2);
                 }
-                // send_base += LimitSeqNo - send_base_Seq + ack;
-                System.out.println("send_base after update "+send_base);
-                for(int i=0;i<ackstatus.length;i++){
-                    if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
-                        int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
-                        int idx = send_base+offset;
-                        ack_buffer.set(idx,1);
-                        SWS[i] = null;
-                        stopTimer(A);
-                        System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
 
-                        // ackstatus[i] = 1;
-                    }
-                }
+                int last_send_base = send_base;
                 send_base += LimitSeqNo - send_base_Seq + ack;
+                for(int i=last_send_base;i<send_base;i++){
+                    ack_buffer.set(i,2);
+                }
             }
-            else if(ack >= send_base_Seq+1){
-                for(int i=0;i< SWS.length;i++){
-//                    System.out.println("send_base_Seq "+send_base_Seq);
-//                    System.out.println("get pkt seq_num "+ );
-                    if(SWS[i] != null && SWS[i].getSeqnum() == send_base_Seq){
-                        ack_buffer.set(send_base,1);
-                        SWS[i] = null;
-                        stopTimer(A);
-                        System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+            else if(send_base_Seq < ack){
+                stopTimer(A);
 
-                        // ackstatus[i] = 1;
+                for(int i=0;i < tmpsack.length;i++){
+                    if(tmpsack[i] == -1){
+                        continue;
                     }
+                    int offset = getOffset(send_base_Seq,tmpsack[i]);
+                    System.out.println("offset is "+ offset);
+                    int idx = send_base+offset;
+                    System.out.println("idx is "+ idx);
+                    ack_buffer.set(idx,2);
+                    System.out.println("ack buffer is "+ ack_buffer);
                 }
-                
-                System.out.println("send_base after update "+send_base);
-                for(int i=0;i<ackstatus.length;i++){
-                    if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
 
-                        int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
-                        int idx = send_base+offset;
-                        ack_buffer.set(idx,1);
-
-                        SWS[i] = null;
-                        stopTimer(A);
-                        System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
-
-                        // ackstatus[i] = 1;
-                    }
+                int last_send_base = send_base;
+                send_base += ack-send_base_Seq;
+                for(int i=last_send_base;i<send_base;i++){
+                    ack_buffer.set(i,2);
                 }
-                send_base += (ack - send_base_Seq);
             }
             else{
-//                stopTimer(A);
-                System.out.println("show send_base when ack <= send_base"+send_base);
-                for(int i=0;i<ackstatus.length;i++){
-                    if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
-                        int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
-                        int idx = send_base+offset;
-                        ack_buffer.set(idx,1);
-                        SWS[i] = null;
-                        stopTimer(A);
-                        System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
-                        // ackstatus[i] = 1;
+                stopTimer(A);
+                for(int i=0;i < tmpsack.length;i++){
+                    if(tmpsack[i] == -1){
+                        continue;
                     }
+                    int offset = getOffset(send_base_Seq,tmpsack[i]);
+                    int idx = send_base+offset;
+                    ack_buffer.set(idx,2);
                 }
+
             }
+
+
+
+//             if(send_base_Seq >= WindowSize && ack < WindowSize){
+//             //pkt at send_base got by B
+//                 for(int i=0;i< SWS.length;i++){
+// //                    System.out.println("send_base_Seq "+send_base_Seq);
+//                     if(SWS[i] != null && SWS[i].getSeqnum() == send_base_Seq){
+//                         SWS[i] = null;
+//                         ack_buffer.set(send_base,1);
+//                         stopTimer(A);
+//                         System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+//                         // ackstatus[i] = 1;
+//                     }
+//                 }
+//                 // send_base += LimitSeqNo - send_base_Seq + ack;
+//                 System.out.println("send_base after update "+send_base);
+//                 for(int i=0;i<ackstatus.length;i++){
+//                     if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
+//                         int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
+//                         int idx = send_base+offset;
+//                         ack_buffer.set(idx,1);
+//                         SWS[i] = null;
+//                         stopTimer(A);
+//                         System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+
+//                         // ackstatus[i] = 1;
+//                     }
+//                 }
+//                 send_base += LimitSeqNo - send_base_Seq + ack;
+//             }
+//             else if(ack >= send_base_Seq+1){
+//                 for(int i=0;i< SWS.length;i++){
+// //                    System.out.println("send_base_Seq "+send_base_Seq);
+// //                    System.out.println("get pkt seq_num "+ );
+//                     if(SWS[i] != null && SWS[i].getSeqnum() == send_base_Seq){
+//                         ack_buffer.set(send_base,1);
+//                         SWS[i] = null;
+//                         stopTimer(A);
+//                         System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+
+//                         // ackstatus[i] = 1;
+//                     }
+//                 }
+                
+//                 System.out.println("send_base after update "+send_base);
+//                 for(int i=0;i<ackstatus.length;i++){
+//                     if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
+
+//                         int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
+//                         int idx = send_base+offset;
+//                         ack_buffer.set(idx,1);
+
+//                         SWS[i] = null;
+//                         stopTimer(A);
+//                         System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+
+//                         // ackstatus[i] = 1;
+//                     }
+//                 }
+//                 send_base += (ack - send_base_Seq);
+//             }
+//             else{
+// //                stopTimer(A);
+//                 System.out.println("show send_base when ack <= send_base"+send_base);
+//                 for(int i=0;i<ackstatus.length;i++){
+//                     if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
+//                         int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
+//                         int idx = send_base+offset;
+//                         ack_buffer.set(idx,1);
+//                         SWS[i] = null;
+//                         stopTimer(A);
+//                         System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
+//                         // ackstatus[i] = 1;
+//                     }
+//                 }
+//             }
         }
     }
 
@@ -338,11 +398,11 @@ public class StudentNetworkSimulator extends NetworkSimulator
     // the retransmission of packets. See startTimer() and stopTimer(), above,
     // for how the timer is started and stopped.
     protected void aTimerInterrupt() {
-        System.out.println("Timer interrupt, resend SWS");
-        System.out.println("In Timer Interrupt, print SWS "+printSWS(SWS));
-        for(int i=0;i<SWS.length;i++){
-            if(SWS[i]!= null){
-                toLayer3(A, SWS[i]);
+        System.out.println("Timer interrupt");
+
+        for(int i=send_base;i<LPS;i++){
+            if(ack_buffer.get(i)!=2){
+                toLayer3(A, sender_buffer.get(i));
                 stopTimer(A);
                 startTimer(A, RxmtInterval);
             }
