@@ -27,14 +27,14 @@ public class Project
         Scanner sn = new Scanner(System.in);
         response = sn.nextInt();
         if(response == 1){
-            nsim = 10;
+            nsim = 1000;
             loss = 0.1;
             corrupt = 0.1;
             delay = 200;
             trace = 3;
             seed = 1234;
-            windowsize = 3;
-            timeout = 15;
+            windowsize = 8;
+            timeout = 30;
         }
         
         while (nsim < 1)
