@@ -413,7 +413,7 @@ public class StudentNetworkSimulator extends NetworkSimulator
 //             }
 //             else{
 // //                stopTimer(A);
-//                 System.out.println("show send_base when ack <= send_base"+send_base);
+
 //                 for(int i=0;i<ackstatus.length;i++){
 //                     if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
 //                         int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
