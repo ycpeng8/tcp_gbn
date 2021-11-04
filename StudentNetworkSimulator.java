@@ -121,11 +121,10 @@ public class StudentNetworkSimulator extends NetworkSimulator
     private LinkedList<Packet> sender_buffer = new LinkedList<>();
     private LinkedList<Integer> ack_buffer = new LinkedList<>();
     // private Packet[] SWS; //Sender Window
-    private int send_base;
-    private int next_seq;
+    private int send_base; //index of last unacked packet 
+    private int next_seq;//next packet sequnce number
     private int LPS; // Last packet sent
-    private Packet[] SWS;   //Sender Window
-    private int[] ackstatus;
+
 
     /*
      * B variables and functions
@@ -171,25 +170,7 @@ public class StudentNetworkSimulator extends NetworkSimulator
         return packet.getChecksum() != Checksumming(packet);
     }
 
-    //print SWS
-    private String printSWS(Packet[] sws){
-        StringBuilder s = new StringBuilder();
-        s.append("[ ");
-        String[] ret = new String[sws.length];
-        for(int i=0; i<sws.length;i++){
-            if(sws[i]== null){
-                ret[i] = "null";
-                s.append(ret[i]+", ");
-            }
-            else{
-                ret[i] = "pkt "+sws[i].getSeqnum();
-                s.append(ret[i]+", ");
-            }
-        }
-        s.append("]");
-        return s.toString();
-    }
-
+    // calculate the offset between send_base_seqnum and acked num
     private int getOffset(int sbq, int ackseq){
         if(ackseq< sbq){
             return LimitSeqNo - sbq + ackseq;
@@ -224,28 +205,19 @@ public class StudentNetworkSimulator extends NetworkSimulator
         ack_buffer.add(0);
         System.out.println("sender buffer size is " + sender_buffer.size());
         System.out.println("LPS is " + LPS);
-        // System.out.println("get payload " + sender_buffer.get(LPS).getPayload());
         System.out.println("Send_base is " + send_base);
         System.out.println("window siez is " + WindowSize);
 
+        // travers the send window to see if there is any unsent packet then send it.
         for (LPS = send_base; LPS < sender_buffer.size() && LPS < send_base + WindowSize; LPS++) {
-            if (sender_buffer.get(LPS) != null && ack_buffer.get(LPS) == 0) {
+            if (sender_buffer.get(LPS) != null && ack_buffer.get(LPS) == 0) { 
                 Num_originalPkt_transBy_A++;
                 toLayer3(A, sender_buffer.get(LPS));
                 rtt_map.put(LPS,getTime());
-                rttCount++;
                 commun_Map.put(LPS,getTime());
-                communCount++;
-                ack_buffer.set(LPS,1);
+                ack_buffer.set(LPS,1); // set 1 in ack_buffer to indicate this packet has been sent but not acked yet
                 stopTimer(A);
                 startTimer(A, RxmtInterval);
-                // int pkt_seq = sender_buffer.get(LPS).getSeqnum();
-                // if(SWS[pkt_seq % WindowSize] == null && ack_buffer.get(LPS)!= 1){
-                //     SWS[pkt_seq % WindowSize] = sender_buffer.get(LPS);
-                //     toLayer3(A, sender_buffer.get(LPS));
-                //     stopTimer(A);
-                //     startTimer(A, RxmtInterval);
-                // }
             }
         }
 
@@ -261,21 +233,17 @@ public class StudentNetworkSimulator extends NetworkSimulator
         if(Checksumming(packet) == packet.getChecksum()){
             int[] tmpsack = packet.getSack();
             int send_base_Seq = send_base % LimitSeqNo;
-            // System.out.println("show sack ");
-            // for(int i : tmpsack){
-            //     System.out.print(i+", ");
-            // }
             List<Integer> tmpal = Arrays.stream(packet.getSack()).boxed().collect(Collectors.toList());
             int ack = packet.getSeqnum();
             System.out.println("get sack "+tmpal);
             System.out.println("get ack "+ack);
             System.out.println("send_base_Seq "+send_base_Seq);
             System.out.println("send_base before update "+send_base);
-            // System.out.println("In Ainput before update send_base, print SWS "+printSWS(SWS));
 
-            if(ack < send_base_Seq){
-                stopTimer(A);
-
+            /* GBN send culmulative ack. Update send_abse according to the ack*/
+            rttCount++;
+            if(ack < send_base_Seq){ // Since the sequence number is wrapped so am the ack number. 
+                stopTimer(A);        // The situation that ack number is less than Send base can occur
                 for(int i=0;i < tmpsack.length;i++){
                     if(tmpsack[i] == -1){
                         continue;
@@ -286,25 +254,24 @@ public class StudentNetworkSimulator extends NetworkSimulator
                 }
 
                 int last_send_base = send_base;
-                send_base += LimitSeqNo - send_base_Seq + ack;
+                send_base += LimitSeqNo - send_base_Seq + ack; // update send_base when ack number is less than Send base can occur
                 System.out.println("send_base after update "+send_base);
-                for(int i=last_send_base;i<send_base && i<ack_buffer.size();i++){
-                    ack_buffer.set(i,2);
-                    
-                    double tmptime = rtt_map.get(last_send_base);
+                for(int i=last_send_base;i<send_base && i<ack_buffer.size();i++){//Check the acks in SACK
+                    ack_buffer.set(i,2);                                         //update status of the packets that are acked in SACK to 2,  
+                                                                                 // meaning this packet has been acked so that it will not be retransmitted
+                    double tmptime = rtt_map.get(send_base-1);
                     if(tmptime != -1.0){
                         total_rtt += getTime() - tmptime;
                         rtt_map.put(last_send_base,-1.0);
-                        rttCount++;
+                        // rttCount++;
                     }
                     total_commun += getTime() - commun_Map.get(last_send_base);
                     communCount++;
 
                 }
             }
-            else if(send_base_Seq < ack){
+            else if(send_base_Seq < ack){ // Normal situation that ack is larger than send_base seq 
                 stopTimer(A);
-
                 for(int i=0;i < tmpsack.length;i++){
                     if(tmpsack[i] == -1){
                         continue;
@@ -316,18 +283,16 @@ public class StudentNetworkSimulator extends NetworkSimulator
                     ack_buffer.set(idx,2);
                     System.out.println("ack buffer is "+ ack_buffer);
                 }
-
                 int last_send_base = send_base;
-                send_base += ack-send_base_Seq;
+                send_base += ack-send_base_Seq; // update send_base
                 System.out.println("send_base after update "+send_base);
-                for(int i=last_send_base;i<send_base && i<ack_buffer.size();i++){
-                    ack_buffer.set(i,2);
-
-                    double tmptime = rtt_map.get(last_send_base);
+                for(int i=last_send_base;i<send_base && i<ack_buffer.size();i++){ //Check the acks in SACK
+                    ack_buffer.set(i,2);                                          //update status of the packets that are acked in SACK to 2,  
+                                                                                // meaning this packet has been acked so that it will not be retransmitted
+                    double tmptime = rtt_map.get(send_base-1);
                     if(tmptime != -1.0){
                         total_rtt += getTime() - tmptime;
                         rtt_map.put(last_send_base,-1.0);
-                        rttCount++;
                     }
                     total_commun += getTime() - commun_Map.get(last_send_base);
                     communCount++;
@@ -335,8 +300,6 @@ public class StudentNetworkSimulator extends NetworkSimulator
                 }
             }
             else{
-                // stopTimer(A);
-                System.out.println("send_base no update "+send_base);
                 for(int i=0;i < tmpsack.length;i++){
                     if(tmpsack[i] == -1){
                         continue;
@@ -347,85 +310,10 @@ public class StudentNetworkSimulator extends NetworkSimulator
                 }
 
             }
-
-
-
-//             if(send_base_Seq >= WindowSize && ack < WindowSize){
-//             //pkt at send_base got by B
-//                 for(int i=0;i< SWS.length;i++){
-// //                    System.out.println("send_base_Seq "+send_base_Seq);
-//                     if(SWS[i] != null && SWS[i].getSeqnum() == send_base_Seq){
-//                         SWS[i] = null;
-//                         ack_buffer.set(send_base,1);
-//                         stopTimer(A);
-//                         System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
-//                         // ackstatus[i] = 1;
-//                     }
-//                 }
-//                 // send_base += LimitSeqNo - send_base_Seq + ack;
-//                 System.out.println("send_base after update "+send_base);
-//                 for(int i=0;i<ackstatus.length;i++){
-//                     if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
-//                         int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
-//                         int idx = send_base+offset;
-//                         ack_buffer.set(idx,1);
-//                         SWS[i] = null;
-//                         stopTimer(A);
-//                         System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
-
-//                         // ackstatus[i] = 1;
-//                     }
-//                 }
-//                 send_base += LimitSeqNo - send_base_Seq + ack;
-//             }
-//             else if(ack >= send_base_Seq+1){
-//                 for(int i=0;i< SWS.length;i++){
-// //                    System.out.println("send_base_Seq "+send_base_Seq);
-// //                    System.out.println("get pkt seq_num "+ );
-//                     if(SWS[i] != null && SWS[i].getSeqnum() == send_base_Seq){
-//                         ack_buffer.set(send_base,1);
-//                         SWS[i] = null;
-//                         stopTimer(A);
-//                         System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
-
-//                         // ackstatus[i] = 1;
-//                     }
-//                 }
-                
-//                 System.out.println("send_base after update "+send_base);
-//                 for(int i=0;i<ackstatus.length;i++){
-//                     if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
-
-//                         int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
-//                         int idx = send_base+offset;
-//                         ack_buffer.set(idx,1);
-
-//                         SWS[i] = null;
-//                         stopTimer(A);
-//                         System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
-
-//                         // ackstatus[i] = 1;
-//                     }
-//                 }
-//                 send_base += (ack - send_base_Seq);
-//             }
-//             else{
-// //                stopTimer(A);
-//                 System.out.println("show send_base when ack <= send_base"+send_base);
-//                 for(int i=0;i<ackstatus.length;i++){
-//                     if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
-//                         int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
-//                         int idx = send_base+offset;
-//                         ack_buffer.set(idx,1);
-//                         SWS[i] = null;
-//                         stopTimer(A);
-//                         System.out.println("In Ainput after update send_base, print SWS "+printSWS(SWS));
-//                         // ackstatus[i] = 1;
-//                     }
-//                 }
-//             }
         }
         else{
+            //get corrupted packet
+            System.out.println("get a corrupted ack packet from B");
             Num_corrupted_pkt++;
         }
     }
@@ -439,13 +327,12 @@ public class StudentNetworkSimulator extends NetworkSimulator
         
         for(int i=send_base;i<LPS;i++){
             if(ack_buffer.get(i)!=2){
-                if(ack_buffer.get(i)==0){
+                if(ack_buffer.get(i)==0){ //Check if there is any new packet in the sendwindow. If so, number of original packet sent by A adds one
                     Num_originalPkt_transBy_A++;
-                    // rtt_map.put(i,getTime());
                     rttCount++;
                     commun_Map.put(i,getTime());
                     communCount++;
-                }else{
+                }else{ 
                     Num_retransBy_A++;
                 }
                 toLayer3(A, sender_buffer.get(i));
@@ -461,15 +348,10 @@ public class StudentNetworkSimulator extends NetworkSimulator
     // initialization (e.g. of member variables you add to control the state
     // of entity A).
     protected void aInit() {
-
-        // SWS = new Packet[WindowSize];
         send_base = 0;
         next_seq = 0;
         LPS = 0;
         LimitSeqNo = WindowSize + 1;
-        SWS = new Packet[WindowSize];
-        ackstatus = new int[WindowSize];
-
     }
 
     // This routine will be called whenever a packet sent from the A-side
@@ -634,7 +516,12 @@ public class StudentNetworkSimulator extends NetworkSimulator
     protected void Simulation_done() {
         // TO PRINT THE STATISTICS, FILL IN THE DETAILS BY PUTTING VARIBALE NAMES. DO
         // NOT CHANGE THE FORMAT OF PRINTED OUTPUT
-        double  Ratio_lost = (double)(Num_retransBy_A - Num_corrupted_pkt)/(double)((Num_originalPkt_transBy_A+Num_retransBy_A)+Num_Ackpkt_sentBy_B);
+        double  Ratio_lost = 0;
+        if(Num_retransBy_A - Num_corrupted_pkt < 0){
+            Ratio_lost = 0;
+        }else{
+            Ratio_lost = (double)(Num_retransBy_A - Num_corrupted_pkt)/(double)((Num_originalPkt_transBy_A+Num_retransBy_A)+Num_Ackpkt_sentBy_B);
+        }
         double  Ratio_corrupted = (double)Num_corrupted_pkt / (double)((Num_originalPkt_transBy_A+Num_retransBy_A)+ Num_Ackpkt_sentBy_B-(Num_retransBy_A-Num_corrupted_pkt));
         System.out.println("\n\n===============STATISTICS=======================");
         System.out.println("Number of original packets transmitted by A:" + Num_originalPkt_transBy_A);
@@ -650,6 +537,10 @@ public class StudentNetworkSimulator extends NetworkSimulator
 
         // PRINT YOUR OWN STATISTIC HERE TO CHECK THE CORRECTNESS OF YOUR PROGRAM
         System.out.println("\nEXTRA:");
+        System.out.println("All rtt:" + total_rtt);
+        System.out.println("counter for rtt:" + rttCount);
+        System.out.println("All communication time:" + total_commun);
+        System.out.println("counter for communication:" + communCount);
         // EXAMPLE GIVEN BELOW
         // System.out.println("Example statistic you want to check e.g. number of ACK packets received by A :" + "<YourVariableHere>");
     }

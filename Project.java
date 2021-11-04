@@ -22,21 +22,24 @@ public class Project
                                    
         System.out.println("-- * Network Simulator v1.0 * --");
 
-        int response;
-        System.out.println("use predefined param? (enter 1)");
-        Scanner sn = new Scanner(System.in);
-        response = sn.nextInt();
-        if(response == 1){
-            nsim = 1000;
-            loss = 0.1;
-            corrupt = 0.1;
-            delay = 200;
-            trace = 3;
-            seed = 1234;
-            windowsize = 8;
-            timeout = 30;
-        }
-        
+        // int response;
+        // System.out.println("use predefined param? (enter 1)");
+        // Scanner sn = new Scanner(System.in);
+        // response = sn.nextInt();
+        // if(response == 1){
+        //     nsim = 100;
+        //     loss = 0.1;
+        //     corrupt = 0.1;
+        //     delay = 200;
+        //     trace = 3;
+        //     windowsize = 8;
+        //     timeout = 30;
+        // }
+        // int inputseed;
+        // System.out.println("enter seed");
+        // inputseed = sn.nextInt();
+        // seed = inputseed;
+
         while (nsim < 1)
         {
             System.out.print("Enter number of messages to simulate (> 0): " +
