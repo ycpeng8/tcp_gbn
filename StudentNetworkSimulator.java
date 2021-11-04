@@ -222,22 +222,20 @@ public class StudentNetworkSimulator extends NetworkSimulator
         sender_packet.setChecksum(Checksumming(sender_packet));
         sender_buffer.add(sender_packet);
         ack_buffer.add(0);
-        // System.out.println("sender buffer size is " + sender_buffer.size());
-        // System.out.println("LPS is " + LPS);
+        System.out.println("sender buffer size is " + sender_buffer.size());
+        System.out.println("LPS is " + LPS);
         // System.out.println("get payload " + sender_buffer.get(LPS).getPayload());
-        // System.out.println("Send_base is" + send_base);
-        // System.out.println("window siez is " + WindowSize);
+        System.out.println("Send_base is " + send_base);
+        System.out.println("window siez is " + WindowSize);
 
         for (LPS = send_base; LPS < sender_buffer.size() && LPS < send_base + WindowSize; LPS++) {
             if (sender_buffer.get(LPS) != null && ack_buffer.get(LPS) == 0) {
                 Num_originalPkt_transBy_A++;
                 toLayer3(A, sender_buffer.get(LPS));
-
                 rtt_map.put(LPS,getTime());
                 rttCount++;
                 commun_Map.put(LPS,getTime());
                 communCount++;
-
                 ack_buffer.set(LPS,1);
                 stopTimer(A);
                 startTimer(A, RxmtInterval);
@@ -289,7 +287,8 @@ public class StudentNetworkSimulator extends NetworkSimulator
 
                 int last_send_base = send_base;
                 send_base += LimitSeqNo - send_base_Seq + ack;
-                for(int i=last_send_base;i<send_base;i++){
+                System.out.println("send_base after update "+send_base);
+                for(int i=last_send_base;i<send_base && i<ack_buffer.size();i++){
                     ack_buffer.set(i,2);
                     
                     double tmptime = rtt_map.get(last_send_base);
@@ -320,7 +319,8 @@ public class StudentNetworkSimulator extends NetworkSimulator
 
                 int last_send_base = send_base;
                 send_base += ack-send_base_Seq;
-                for(int i=last_send_base;i<send_base;i++){
+                System.out.println("send_base after update "+send_base);
+                for(int i=last_send_base;i<send_base && i<ack_buffer.size();i++){
                     ack_buffer.set(i,2);
 
                     double tmptime = rtt_map.get(last_send_base);
@@ -335,10 +335,8 @@ public class StudentNetworkSimulator extends NetworkSimulator
                 }
             }
             else{
-                stopTimer(A);
-
-
-
+                // stopTimer(A);
+                System.out.println("send_base no update "+send_base);
                 for(int i=0;i < tmpsack.length;i++){
                     if(tmpsack[i] == -1){
                         continue;
@@ -413,7 +411,7 @@ public class StudentNetworkSimulator extends NetworkSimulator
 //             }
 //             else{
 // //                stopTimer(A);
-
+//                 System.out.println("show send_base when ack <= send_base"+send_base);
 //                 for(int i=0;i<ackstatus.length;i++){
 //                     if(SWS[i] != null && tmpal.contains(SWS[i].getSeqnum())){
 //                         int offset = getOffset(send_base_Seq,SWS[i].getSeqnum());
